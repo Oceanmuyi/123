@@ -2,42 +2,39 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>流动颗粒感 3D 背景</title>
+    <title>千岛：极境 - 预览版</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #00050a; }
         canvas { display: block; }
-        #overlay {
+        #ui {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 20px;
+            left: 20px;
             color: white;
             font-family: "PingFang SC", sans-serif;
-            text-align: center;
             pointer-events: none;
-            letter-spacing: 5px;
-            text-shadow: 0 0 20px rgba(255,255,255,0.5);
         }
+        #score-board { font-size: 24px; letter-spacing: 2px; }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <h1>Yuan · 千岛</h1>
-        <p>探索滑雪与潜水的边界</p>
+    <div id="ui">
+        <div id="score-board">SCORE: <span id="score">0</span></div>
+        <p>左右移动鼠标进行避障</p>
     </div>
 
-<script type="importmap">
-    {
-        "imports": {
-            "three": "https://lib.baomitu.com/three.js/0.160.0/three.module.js"
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://lib.baomitu.com/three.js/0.160.0/three.module.js"
+            }
         }
-    }
-</script>
+    </script>
 
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 初始化场景 ---
+        // --- 1. 基础场景设置 ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 50;
@@ -47,61 +44,98 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- 粒子系统配置 ---
-        const PARTICLE_COUNT = 15000;
-        const positions = new Float32Array(PARTICLE_COUNT * 3);
-        const geometry = new THREE.BufferGeometry();
-
-        // 初始分布在一个平面上
+        // --- 2. 流动背景粒子 (你之前的逻辑) ---
+        const PARTICLE_COUNT = 8000; // 稍微减少数量以保证流畅度
+        const bgGeometry = new THREE.BufferGeometry();
+        const bgPositions = new Float32Array(PARTICLE_COUNT * 3);
         for (let i = 0; i < PARTICLE_COUNT; i++) {
-            positions[i * 3] = (Math.random() - 0.5) * 150;     // X
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 100; // Y
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 50;  // Z
+            bgPositions[i * 3] = (Math.random() - 0.5) * 150;
+            bgPositions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+            bgPositions[i * 3 + 2] = (Math.random() - 0.5) * 100 - 50;
         }
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        bgGeometry.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+        const bgMaterial = new THREE.PointsMaterial({ color: 0x00ccff, size: 0.1, transparent: true, opacity: 0.5 });
+        const bgPoints = new THREE.Points(bgGeometry, bgMaterial);
+        scene.add(bgPoints);
 
-        // 材质：使用混合模式让粒子看起来有光晕感
-        const material = new THREE.PointsMaterial({
-            color: 0x00ccff,
-            size: 0.15,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending
+        // --- 3. 游戏主角 (Player) ---
+        const playerGeo = new THREE.IcosahedronGeometry(0.8, 1); // 二十面体，更有设计感
+        const playerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+        const player = new THREE.Mesh(playerGeo, playerMat);
+        player.position.set(0, 0, 40); // 放在相机近处
+        scene.add(player);
+
+        // --- 4. 障碍物系统 ---
+        const obstacles = [];
+        const obsGeo = new THREE.BoxGeometry(1, 1, 1);
+        const obsMat = new THREE.MeshBasicMaterial({ color: 0xff3366 });
+
+        function spawnObstacle() {
+            const obs = new THREE.Mesh(obsGeo, obsMat);
+            obs.position.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 20, -100);
+            scene.add(obs);
+            obstacles.push(obs);
+        }
+
+        // --- 5. 交互控制 ---
+        let targetX = 0;
+        let targetY = 0;
+        let score = 0;
+
+        window.addEventListener('mousemove', (e) => {
+            targetX = (e.clientX / window.innerWidth) * 2 - 1;
+            targetY = -(e.clientY / window.innerHeight) * 2 + 1;
         });
 
-        const points = new THREE.Points(geometry, material);
-        scene.add(points);
-
-        // --- 动画循环 ---
-        let clock = new THREE.Clock();
+        // --- 6. 动画循环 ---
+        const clock = new THREE.Clock();
+        const scoreEl = document.getElementById('score');
 
         function animate() {
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
 
-            const positions = geometry.attributes.position.array;
+            // 主角平滑跟随
+            player.position.x += (targetX * 25 - player.position.x) * 0.1;
+            player.position.y += (targetY * 15 - player.position.y) * 0.1;
+            player.rotation.y += 0.02;
 
+            // 背景粒子流动
+            const positions = bgGeometry.attributes.position.array;
             for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const x = positions[i * 3];
-                const y = positions[i * 3 + 1];
+                const px = positions[i * 3];
+                const py = positions[i * 3 + 1];
+                positions[i * 3 + 2] += 0.2; // 粒子向玩家飘来
+                if (positions[i * 3 + 2] > 50) positions[i * 3 + 2] = -50; // 循环
+            }
+            bgGeometry.attributes.position.needsUpdate = true;
 
-                // 使用 Sine/Cosine 叠加创建流体波动感
-                // 这里模拟了类似海浪或风雪的律动
-                positions[i * 3 + 2] = 
-                    Math.sin(x * 0.1 + time) * 5 + 
-                    Math.cos(y * 0.2 + time) * 5;
+            // 障碍物逻辑
+            if (Math.random() > 0.96) spawnObstacle();
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.position.z += 1.2; 
+                obs.rotation.x += 0.05;
+
+                // 碰撞检测
+                if (player.position.distanceTo(obs.position) < 1.5) {
+                    score = Math.max(0, score - 5); // 撞到减分
+                    player.material.color.set(0xff0000);
+                    setTimeout(() => player.material.color.set(0xffffff), 100);
+                }
+
+                // 移除飞过的障碍物并加分
+                if (obs.position.z > 50) {
+                    scene.remove(obs);
+                    obstacles.splice(i, 1);
+                    score += 10;
+                }
             }
 
-            geometry.attributes.position.needsUpdate = true; // 告诉渲染器顶点已更新
-
-            // 整体缓慢旋转，增加沉浸感
-            points.rotation.y += 0.001;
-            points.rotation.x += 0.0005;
-
+            scoreEl.innerText = score;
             renderer.render(scene, camera);
         }
 
-        // 窗口缩放适配
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
