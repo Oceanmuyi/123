@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>流动颗粒感 3D 背景</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #00050a; }
+        canvas { display: block; }
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: "PingFang SC", sans-serif;
+            text-align: center;
+            pointer-events: none;
+            letter-spacing: 5px;
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <h1>Yuan · 千岛</h1>
+        <p>探索滑雪与潜水的边界</p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 初始化场景 ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 50;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- 粒子系统配置 ---
+        const PARTICLE_COUNT = 15000;
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const geometry = new THREE.BufferGeometry();
+
+        // 初始分布在一个平面上
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            positions[i * 3] = (Math.random() - 0.5) * 150;     // X
+            positions[i * 3 + 1] = (Math.random() - 0.5) * 100; // Y
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 50;  // Z
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        // 材质：使用混合模式让粒子看起来有光晕感
+        const material = new THREE.PointsMaterial({
+            color: 0x00ccff,
+            size: 0.15,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
+
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+
+        // --- 动画循环 ---
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            const positions = geometry.attributes.position.array;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const x = positions[i * 3];
+                const y = positions[i * 3 + 1];
+
+                // 使用 Sine/Cosine 叠加创建流体波动感
+                // 这里模拟了类似海浪或风雪的律动
+                positions[i * 3 + 2] = 
+                    Math.sin(x * 0.1 + time) * 5 + 
+                    Math.cos(y * 0.2 + time) * 5;
+            }
+
+            geometry.attributes.position.needsUpdate = true; // 告诉渲染器顶点已更新
+
+            // 整体缓慢旋转，增加沉浸感
+            points.rotation.y += 0.001;
+            points.rotation.x += 0.0005;
+
+            renderer.render(scene, camera);
+        }
+
+        // 窗口缩放适配
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
