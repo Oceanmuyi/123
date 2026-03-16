@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>千岛：极境</title>
+    <title>千岛：极境 - 音乐增强版</title>
     <style>
         body { margin: 0; overflow: hidden; background: #00050a; font-family: "PingFang SC", sans-serif; color: white; }
         .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; background: rgba(0,5,10,0.85); backdrop-filter: blur(5px); }
@@ -15,8 +15,13 @@
 <body>
     <div id="game-ui" style="display:none;">SCORE: <span id="score">0</span></div>
     
+    <audio id="bgm" loop>
+        <source src="https://actions.google.com/sounds/v1/ambiences/deep_underwater_ambience.ogg" type="audio/ogg">
+    </audio>
+
     <div id="start-screen" class="screen">
         <h1>千岛 · 极境</h1>
+        <p style="margin-bottom: 20px; opacity: 0.6;">建议开启声音以获得沉浸体验</p>
         <button id="start-btn">开始探索</button>
     </div>
     
@@ -33,11 +38,9 @@
     <script type="module">
         import * as THREE from 'three';
         
-        // --- 游戏变量 ---
         let gameState = 'MENU';
-        let score = 0;
-        let obstacles = [];
-        let targetX = 0, targetY = 0;
+        let score = 0, obstacles = [], targetX = 0, targetY = 0;
+        const bgm = document.getElementById('bgm');
 
         // --- 场景初始化 ---
         const scene = new THREE.Scene();
@@ -47,7 +50,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- 1. 背景粒子 (始终存在) ---
+        // 背景粒子
         const bgCount = 5000;
         const bgGeo = new THREE.BufferGeometry();
         const bgPos = new Float32Array(bgCount * 3);
@@ -61,16 +64,13 @@
         const bgPoints = new THREE.Points(bgGeo, bgMat);
         scene.add(bgPoints);
 
-        // --- 2. 主角 ---
-        const player = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(0.8, 1), 
-            new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
-        );
+        // 主角
+        const player = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
         player.position.z = 40;
-        player.visible = false; // 初始隐藏
+        player.visible = false;
         scene.add(player);
 
-        // --- 3. 障碍物原型 ---
+        // 障碍物设置
         const obsGeo = new THREE.BoxGeometry(1, 1, 1);
         const obsMat = new THREE.MeshBasicMaterial({ color: 0xff3366 });
 
@@ -81,14 +81,18 @@
             obstacles.push(obs);
         }
 
-        // --- 4. 状态切换逻辑 ---
+        // --- 状态逻辑 ---
         window.initGame = () => {
             gameState = 'PLAYING';
             score = 0;
             obstacles.forEach(o => scene.remove(o));
             obstacles = [];
             player.visible = true;
-            player.position.set(0, 0, 40);
+            
+            // 播放音乐
+            bgm.play().catch(e => console.log("需用户交互方可播放音频"));
+            bgm.volume = 0.5;
+
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('gameover-screen').style.display = 'none';
             document.getElementById('game-ui').style.display = 'block';
@@ -97,30 +101,23 @@
         const gameOver = () => {
             gameState = 'GAMEOVER';
             player.visible = false;
+            bgm.volume = 0.1; // 死亡时音乐变小，营造空灵感
             document.getElementById('gameover-screen').style.display = 'flex';
             document.getElementById('game-ui').style.display = 'none';
             document.getElementById('final-score').innerText = score;
         };
 
-        // --- 5. 交互 ---
+        // 交互
         window.addEventListener('mousemove', (e) => {
             targetX = (e.clientX / window.innerWidth) * 2 - 1;
             targetY = -(e.clientY / window.innerHeight) * 2 + 1;
-        });
-        // 兼容手机触摸
-        window.addEventListener('touchmove', (e) => {
-            targetX = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
-            targetY = -(e.touches[0].clientY / window.innerHeight) * 2 + 1;
         });
 
         document.getElementById('start-btn').onclick = window.initGame;
         document.getElementById('restart-btn').onclick = window.initGame;
 
-        // --- 6. 核心循环 ---
         function animate() {
             requestAnimationFrame(animate);
-
-            // 背景始终旋转流动
             bgPoints.rotation.y += 0.001;
             const pos = bgGeo.attributes.position.array;
             for(let i=0; i<bgCount; i++) {
@@ -130,22 +127,15 @@
             bgGeo.attributes.position.needsUpdate = true;
 
             if (gameState === 'PLAYING') {
-                // 主角跟随
                 player.position.x += (targetX * 25 - player.position.x) * 0.1;
                 player.position.y += (targetY * 15 - player.position.y) * 0.1;
                 player.rotation.x += 0.02; player.rotation.y += 0.02;
 
-                // 障碍物生成与移动
                 if (Math.random() > 0.96) spawnObstacle();
                 for (let i = obstacles.length - 1; i >= 0; i--) {
                     const obs = obstacles[i];
                     obs.position.z += 1.5;
-                    
-                    // 碰撞检测
-                    if (player.position.distanceTo(obs.position) < 1.4) {
-                        gameOver();
-                    }
-
+                    if (player.position.distanceTo(obs.position) < 1.4) gameOver();
                     if (obs.position.z > 60) {
                         scene.remove(obs);
                         obstacles.splice(i, 1);
@@ -154,18 +144,9 @@
                     }
                 }
             }
-
             renderer.render(scene, camera);
         }
-
         animate();
-
-        // 窗口适配
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
